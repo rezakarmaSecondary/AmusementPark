@@ -15,3 +15,4 @@ def detect_persons_in_frame(frame, bbox_coordinates: dict) -> int:
     cropped = frame[y1:y2, x1:x2]
     results = model(cropped)
     return sum(1 for box in results[0].boxes if box.cls == 0)  # Class 0 = person
+

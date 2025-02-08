@@ -12,6 +12,9 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+from models import Camera, BoundingBox, DeviceLog 
+
+Base.metadata.create_all(bind=engine)
 # Dependency to get DB session
 def get_db():
     db = SessionLocal()

@@ -8,12 +8,13 @@ def get_camera_by_id(db: Session, camera_id: int):
 def get_camera_by_device_id(db: Session, device_id: str):
     return db.query(Camera).filter(Camera.device_id == device_id).first()
 
+# crud.py (example for create_camera)
 def create_camera(db: Session, name: str, stream_url: str, device_id: str):
     camera = Camera(name=name, stream_url=stream_url, device_id=device_id)
     db.add(camera)
     db.commit()
     db.refresh(camera)
-    return camera
+    return camera  # Convert to dict for Pydantic
 
 # --- Bounding Box Operations ---
 def create_bounding_box(db: Session, camera_id: int, coordinates: dict):
