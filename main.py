@@ -18,9 +18,72 @@ from services.camera import capture_frame_from_stream
 from services.detection import detect_persons_in_frame
 import uuid
 import cv2
+from datetime import datetime, timedelta, date
+from contextlib import asynccontextmanager
+import threading
+from database import SessionLocal
+from models import CameraPurpose
+from services.tracker import tracking_worker
+from models import PersonTracking,DailySummary
+from schemas import DailySummaryResponse
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start tracking threads on startup
+    db = SessionLocal()
+    cameras = db.query(CameraPurpose).all()
+    for cam in cameras:
+        camera = get_camera_by_id(db, cam.camera_id)
+        thread = threading.Thread(
+            target=tracking_worker,
+            args=(camera.stream_url, cam.purpose, cam.device_id),
+            daemon=True
+        )
+        thread.start()
+    db.close()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 
-app = FastAPI()
+from apscheduler.schedulers.background import BackgroundScheduler
+
+@app.on_event("startup")
+def init_scheduler():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(aggregate_daily_summaries, 'cron', hour=0)
+    scheduler.start()
+
+def aggregate_daily_summaries():
+    db = SessionLocal()
+    try:
+        yesterday = datetime.utcnow() - timedelta(days=1)
+        start = yesterday.replace(hour=0, minute=0, second=0)
+        end = start + timedelta(days=1)
+        
+        devices = db.query(PersonTracking.device_id).distinct().all()
+        for device_id in devices:
+            entries = db.query(PersonTracking).filter(
+                PersonTracking.device_id == device_id[0],
+                PersonTracking.entry_time.between(start, end)
+            ).count()
+            exits = db.query(PersonTracking).filter(
+                PersonTracking.device_id == device_id[0],
+                PersonTracking.exit_time.between(start, end)
+            ).count()
+            
+            summary = DailySummary(
+                device_id=device_id[0],
+                date=start.date(),
+                total_entries=entries,
+                total_exits=exits
+            )
+            db.add(summary)
+            db.commit()
+    finally:
+        db.close()
+
+
+# app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -132,3 +195,11 @@ async def detect_in_image(request: ImageDetectionRequest, db: Session = Depends(
         raise HTTPException(status_code=400, detail=f"Image download failed: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/daily-summary/{device_id}", response_model=DailySummaryResponse)
+def get_daily_summary(device_id: str, date: date, db: Session = Depends(get_db)):
+    summary = db.query(DailySummary).filter(
+        DailySummary.device_id == device_id,
+        DailySummary.date == date
+    ).first()
+    return summary

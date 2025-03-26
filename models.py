@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey, Date  
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, date  
 from database import Base
 
 class Camera(Base):
@@ -42,3 +42,31 @@ class DeviceLog(Base):
     image_path = Column(String(512))
     
 __all__ = ["Camera", "BoundingBox", "DeviceLog"]
+
+
+# ... (existing models above)
+
+class CameraPurpose(Base):
+    __tablename__ = "camera_purposes"
+    id = Column(Integer, primary_key=True, index=True)
+    camera_id = Column(Integer, ForeignKey("cameras.id"))
+    purpose = Column(String(50))  # 'entry' or 'exit'
+    device_id = Column(String(255))
+
+class PersonTracking(Base):
+    __tablename__ = "person_tracking"
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String(255))
+    tracking_id = Column(Integer)  # From DeepSORT
+    entry_time = Column(DateTime)
+    exit_time = Column(DateTime)
+    last_seen = Column(DateTime)
+    cooldown_until = Column(DateTime)
+
+class DailySummary(Base):
+    __tablename__ = "daily_summaries"
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String(255))
+    date = Column(Date)
+    total_entries = Column(Integer, default=0)
+    total_exits = Column(Integer, default=0)

@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
-from models import Camera, BoundingBox, DeviceLog
-
+from models import Camera, BoundingBox, DeviceLog, CameraPurpose, PersonTracking
+from datetime import datetime, timedelta
+from schemas import CameraPurposeCreate
 # --- Camera Operations ---
 def get_camera_by_id(db: Session, camera_id: int):
     return db.query(Camera).filter(Camera.id == camera_id).first()
@@ -43,3 +44,39 @@ def create_device_log(db: Session, device_id: str, persons_detected: int, image_
     db.commit()
     db.refresh(log)
     return log
+
+
+# ... (existing CRUD above)
+
+def create_camera_purpose(db: Session, camera_purpose: CameraPurposeCreate):
+    db_purpose = CameraPurpose(**camera_purpose.dict())
+    db.add(db_purpose)
+    db.commit()
+    db.refresh(db_purpose)
+    return db_purpose
+
+def get_camera_purpose(db: Session, camera_id: int):
+    return db.query(CameraPurpose).filter(CameraPurpose.camera_id == camera_id).first()
+
+def create_person_tracking(db: Session, device_id: str, tracking_id: int, is_entry: bool):
+    now = datetime.utcnow()
+    entry_time = now if is_entry else None
+    exit_time = now if not is_entry else None
+    tracking = PersonTracking(
+        device_id=device_id,
+        tracking_id=tracking_id,
+        entry_time=entry_time,
+        exit_time=exit_time,
+        last_seen=now,
+        cooldown_until=now + timedelta(minutes=3)
+    )
+    db.add(tracking)
+    db.commit()
+    return tracking
+
+def get_recent_tracking(db: Session, device_id: str, tracking_id: int):
+    return db.query(PersonTracking).filter(
+        PersonTracking.device_id == device_id,
+        PersonTracking.tracking_id == tracking_id,
+        PersonTracking.cooldown_until > datetime.utcnow()
+    ).first()
